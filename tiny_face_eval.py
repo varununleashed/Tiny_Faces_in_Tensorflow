@@ -11,8 +11,8 @@ import cv2
 import scipy.io
 import numpy as np
 import matplotlib.pyplot as plt
-import cv2
 import pickle
+from PIL import Image
 
 import pylab as pl
 import time
@@ -20,10 +20,26 @@ import os
 import sys
 from scipy.special import expit
 import glob
+import random
 
 MAX_INPUT_DIM = 5000.0
+num_f = 0 
+num_nf = 0
 
-def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
+def box_size_calculate(r):
+  """ Calculates 1D size of bounding box
+      Args:
+        r:
+          A list containing the 2 co-ordinates of image [(x1, y1), (x2, y2)]
+  """
+  length = r[2] - r[0]
+  width = r[3] - r[1]
+  return length, width
+
+def Average(lst):
+    return int(sum(lst) / len(lst))
+
+def overlay_bounding_boxes(raw_img, refined_bboxes, lw, n = 0):
   """Overlay bounding boxes of face on images.
     Args:
       raw_img:
@@ -36,7 +52,8 @@ def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
     Returns:
       None.
   """
-
+  face_list = []
+  OneD = []
   # Overlay bounding boxes on an image with the color based on the confidence.
   for r in refined_bboxes:
     _score = expit(r[4])
@@ -49,8 +66,14 @@ def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
       _lw = int(np.ceil(_lw * _score))
 
     _r = [int(x) for x in r[:4]]
-    cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, _lw)
+    #cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, _lw)
+    L, W = box_size_calculate(_r)
+    OneD.append([L,W])
+    face_list.append([_r])
     
+  Lavg = Average(list(item[0] for item in OneD))
+  Wavg = Average(list(item[1] for item in OneD))
+  return face_list, Lavg, Wavg
     
 def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh=0.1, lw=3, display=False):
   """Detect faces in images.
@@ -76,8 +99,10 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   """
 
   # placeholder of input images. Currently batch size of one is supported.
+  
   x = tf.placeholder(tf.float32, [1, None, None, 3]) # n, h, w, c
-
+  global num_f
+  global num_nf
   # Create the tiny face model which weights are loaded from a pretrained model.
   model = tiny_face_model.Model(weight_file_path)
   score_final = model.tiny_face(x)
@@ -104,6 +129,7 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
     for filename in filenames:
       fname = filename.split(os.sep)[-1]
       raw_img = cv2.imread(filename)
+      img_xsize = raw_img
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB)
       raw_img_f = raw_img.astype(np.float32)
 
@@ -126,7 +152,7 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
 
       # process input at different scales
       for s in scales:
-        print("Processing {} at scale {:.4f}".format(fname, s))
+        #print("Processing {} at scale {:.4f}".format(fname, s))
         img = cv2.resize(raw_img_f, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
         img = img - average_image
         img = img[np.newaxis, :]
@@ -187,8 +213,11 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
                                                    max_output_size=bboxes.shape[0], iou_threshold=nms_thresh)
       refind_idx = sess.run(refind_idx)
       refined_bboxes = bboxes[refind_idx]
-      overlay_bounding_boxes(raw_img, refined_bboxes, lw)
-
+      if not refined_bboxes.any():
+        print("No Faces!")
+        return
+      face_list, Lavg, Wavg = overlay_bounding_boxes(img_xsize, refined_bboxes, lw)
+      
       if display:
         # plt.axis('off')
         plt.imshow(raw_img)
@@ -197,6 +226,68 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
       # save image with bounding boxes
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
       cv2.imwrite(os.path.join(output_dir, fname), raw_img)
+      main_img_name = fname.split('.')[0]
+      crop_faces_save(img_xsize, face_list, main_img_name)
+      crop_negative_region_save(img_xsize, face_list, Lavg, Wavg, main_img_name)
+
+def crop_faces_save(img_xsize, face_list, main_img_name):
+  main_directory = '/content/thumbs/'
+  #image_specific_directory = 
+  img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
+  for i in enumerate(face_list):
+    oneFace = img_xsize[i[1][0][1]:i[1][0][3], i[1][0][0]:i[1][0][2]]
+    plt.axis('off')
+    plt.imshow(oneFace) 
+    plt.savefig(main_directory + main_img_name + "face" + str(i[0] + 1) + ".jpg", dpi=117/5)
+    
+
+def crop_negative_region_save(img_xsize, face_list, Lavg, Wavg, main_img_name):
+  n = 0
+  limit = 0
+  total_faces = len(face_list)
+  img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
+  main_directory = '/content/nthumbs/'
+  size = img_xsize.shape
+  legit_size = (size[0] - Wavg, size[1] - Lavg)
+  while True:
+    if n > total_faces:
+      break
+    x1 = random.randint(0, legit_size[0] - 1)
+    y1 = random.randint(0, legit_size[1] - 1)
+    x2 = x1 + Wavg
+    y2 = y1 + Lavg
+    box = (x1, y1, x2, y2)
+    if does_it_overlap(face_list, box):
+      if limit > 1000:
+        break
+      limit = limit + 1
+      continue
+    else:
+      n = n + 1
+      oneFace = img_xsize[y1:y2, x1:x2]
+      if oneFace.shape[0] == 0:
+        n = n - 1
+        continue
+      plt.axis('off')
+      plt.imshow(oneFace) 
+      #plt.savefig(directory + "img" + str(num_nf) + "non-face" + str(n + 1) + ".jpg", dpi=117/5)
+      plt.savefig(main_directory + main_img_name + "non-face" + str(n + 1) + ".jpg", dpi=117/5)
+      
+
+def does_it_overlap(face_list, box):
+  x1 = box[0]
+  x2 = box[2]
+  y1 = box[1]
+  y2 = box[3] 
+  for i in enumerate(face_list):
+    x3 = i[1][0][0]
+    y3 = i[1][0][1]
+    x4 = i[1][0][2]
+    y4 = i[1][0][3]
+    if not (((x2 < x3)) or ((x1 > x4)) or ((y2 < y3)) or ((y1 > y4))):
+      return True
+  return False
+  
 
 def main():
 
