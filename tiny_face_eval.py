@@ -3,8 +3,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+from tiny_face_regions_of_interest import box_size_calculate, crop_faces_save, Average, crop_nonfaces_save
 import tiny_face_model
+import tensorflow as tf
 import util
 from argparse import ArgumentParser
 import cv2
@@ -13,6 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from PIL import Image
+import PIL
 
 import pylab as pl
 import time
@@ -25,19 +27,6 @@ import random
 MAX_INPUT_DIM = 5000.0
 num_f = 0 
 num_nf = 0
-
-def box_size_calculate(r):
-  """ Calculates 1D size of bounding box
-      Args:
-        r:
-          A list containing the 2 co-ordinates of image [(x1, y1), (x2, y2)]
-  """
-  length = r[2] - r[0]
-  width = r[3] - r[1]
-  return length, width
-
-def Average(lst):
-    return int(sum(lst) / len(lst))
 
 def overlay_bounding_boxes(raw_img, refined_bboxes, lw, n = 0):
   """Overlay bounding boxes of face on images.
@@ -67,6 +56,8 @@ def overlay_bounding_boxes(raw_img, refined_bboxes, lw, n = 0):
 
     _r = [int(x) for x in r[:4]]
     #cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, _lw)
+    # if (_r[2] - _r[0] > 300) or (_r[3] - _r[1] > 300) or (_r[2] - _r[0] < 40) or (_r[3] - _r[1] < 40):
+    #   continue
     L, W = box_size_calculate(_r)
     OneD.append([L,W])
     face_list.append([_r])
@@ -227,67 +218,9 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
       cv2.imwrite(os.path.join(output_dir, fname), raw_img)
       main_img_name = fname.split('.')[0]
+      print("Total Faces: ", len(face_list))
       crop_faces_save(img_xsize, face_list, main_img_name)
-      crop_negative_region_save(img_xsize, face_list, Lavg, Wavg, main_img_name)
-
-def crop_faces_save(img_xsize, face_list, main_img_name):
-  main_directory = '/content/thumbs/'
-  #image_specific_directory = 
-  img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
-  for i in enumerate(face_list):
-    oneFace = img_xsize[i[1][0][1]:i[1][0][3], i[1][0][0]:i[1][0][2]]
-    plt.axis('off')
-    plt.imshow(oneFace) 
-    plt.savefig(main_directory + main_img_name + "face" + str(i[0] + 1) + ".jpg", dpi=117/5)
-    
-
-def crop_negative_region_save(img_xsize, face_list, Lavg, Wavg, main_img_name):
-  n = 0
-  limit = 0
-  total_faces = len(face_list)
-  img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
-  main_directory = '/content/nthumbs/'
-  size = img_xsize.shape
-  legit_size = (size[0] - Wavg, size[1] - Lavg)
-  while True:
-    if n > total_faces:
-      break
-    x1 = random.randint(0, legit_size[0] - 1)
-    y1 = random.randint(0, legit_size[1] - 1)
-    x2 = x1 + Wavg
-    y2 = y1 + Lavg
-    box = (x1, y1, x2, y2)
-    if does_it_overlap(face_list, box):
-      if limit > 1000:
-        break
-      limit = limit + 1
-      continue
-    else:
-      n = n + 1
-      oneFace = img_xsize[y1:y2, x1:x2]
-      if oneFace.shape[0] == 0:
-        n = n - 1
-        continue
-      plt.axis('off')
-      plt.imshow(oneFace) 
-      #plt.savefig(directory + "img" + str(num_nf) + "non-face" + str(n + 1) + ".jpg", dpi=117/5)
-      plt.savefig(main_directory + main_img_name + "non-face" + str(n + 1) + ".jpg", dpi=117/5)
-      
-
-def does_it_overlap(face_list, box):
-  x1 = box[0]
-  x2 = box[2]
-  y1 = box[1]
-  y2 = box[3] 
-  for i in enumerate(face_list):
-    x3 = i[1][0][0]
-    y3 = i[1][0][1]
-    x4 = i[1][0][2]
-    y4 = i[1][0][3]
-    if not (((x2 < x3)) or ((x1 > x4)) or ((y2 < y3)) or ((y1 > y4))):
-      return True
-  return False
-  
+      crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name)
 
 def main():
 
@@ -308,11 +241,12 @@ def main():
   assert os.path.exists(args.output_dir), "output directory: " + args.output_dir + " not found."
   assert args.line_width >= 0, "line_width should be >= 0."
 
-  with tf.Graph().as_default():
-    evaluate(
-      weight_file_path=args.weight_file_path, data_dir=args.data_dir, output_dir=args.output_dir,
-      prob_thresh=args.prob_thresh, nms_thresh=args.nms_thresh,
-      lw=args.line_width, display=args.display)
+  for filename in args.data_dir:
+	with tf.Graph().as_default():
+		evaluate(
+		weight_file_path=args.weight_file_path, data_dir=filename, output_dir=args.output_dir,
+		prob_thresh=args.prob_thresh, nms_thresh=args.nms_thresh,
+		lw=args.line_width, display=args.display)
 
 if __name__ == '__main__':
   main()
