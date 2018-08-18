@@ -25,8 +25,6 @@ import glob
 import random
 
 MAX_INPUT_DIM = 5000.0
-num_f = 0 
-num_nf = 0
 
 def overlay_bounding_boxes(raw_img, refined_bboxes, lw, n = 0):
   """Overlay bounding boxes of face on images.
@@ -92,16 +90,15 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   # placeholder of input images. Currently batch size of one is supported.
   
   x = tf.placeholder(tf.float32, [1, None, None, 3]) # n, h, w, c
-  global num_f
-  global num_nf
   # Create the tiny face model which weights are loaded from a pretrained model.
   model = tiny_face_model.Model(weight_file_path)
   score_final = model.tiny_face(x)
 
   # Find image files in data_dir.
-  filenames = []
-  for ext in ('*.png', '*.gif', '*.jpg', '*.jpeg'):
-    filenames.extend(glob.glob(os.path.join(data_dir, ext)))
+  # filenames = []
+  # for ext in ('*.png', '*.gif', '*.jpg', '*.jpeg'):
+  #   filenames.extend(glob.glob(os.path.join(data_dir, ext)))
+  filenames = data_dir
 
   # Load an average image and clusters(reference boxes of templates).
   with open(weight_file_path, "rb") as f:
@@ -118,8 +115,11 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
     sess.run(tf.global_variables_initializer())
 
     for filename in filenames:
+      start = time.time()
       fname = filename.split(os.sep)[-1]
+      #print(filename)
       raw_img = cv2.imread(filename)
+      #print(type(raw_img))
       img_xsize = raw_img
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB)
       raw_img_f = raw_img.astype(np.float32)
@@ -136,7 +136,7 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         return scales
 
       scales = _calc_scales()
-      start = time.time()
+      #start = time.time()
 
       # initialize output
       bboxes = np.empty(shape=(0, 5))
@@ -195,7 +195,7 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         bboxes = np.vstack((bboxes, tmp_bboxes)) # <class 'tuple'>: (5265, 5)
 
 
-      print("time {:.2f} secs for {}".format(time.time() - start, fname))
+      #print("time {:.2f} secs for {}".format(time.time() - start, fname))
 
       # non maximum suppression
       # refind_idx = util.nms(bboxes, nms_thresh)
@@ -204,9 +204,9 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
                                                    max_output_size=bboxes.shape[0], iou_threshold=nms_thresh)
       refind_idx = sess.run(refind_idx)
       refined_bboxes = bboxes[refind_idx]
-      if not refined_bboxes.any():
-        print("No Faces!")
-        return
+      # if not refined_bboxes.any():
+      #   print("No Faces!")
+      #   return
       face_list, Lavg, Wavg = overlay_bounding_boxes(img_xsize, refined_bboxes, lw)
       
       if display:
@@ -218,15 +218,17 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
       cv2.imwrite(os.path.join(output_dir, fname), raw_img)
       main_img_name = fname.split('.')[0]
-      print("Total Faces: ", len(face_list))
-      crop_faces_save(img_xsize, face_list, main_img_name)
-      crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name)
+      #print("Total Faces: ", len(face_list))
+      num_faces_taken = crop_faces_save(img_xsize, face_list, main_img_name)
+      crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_faces_taken)
+      print("time {:.2f} secs for {}".format(time.time() - start, fname))
 
 def main():
 
   argparse = ArgumentParser()
   argparse.add_argument('--weight_file_path', type=str, help='Pretrained weight file.', default="/path/to/mat2tf.pkl")
-  argparse.add_argument('--data_dir', type=str, help='Image data directory.', default="/path/to/input_image_directory")
+  #argparse.add_argument('--data_dir', type=str, help='Image data directory.', default="/path/to/input_image_directory")
+  argparse.add_argument('--data_dir','--list', nargs='+', help='<Required> Set flag', required=True)
   argparse.add_argument('--output_dir', type=str, help='Output directory for images with faces detected.', default="/path/to/output_directory")
   argparse.add_argument('--prob_thresh', type=float, help='The threshold of detection confidence(default: 0.5).', default=0.5)
   argparse.add_argument('--nms_thresh', type=float, help='The overlap threshold of non maximum suppression(default: 0.1).', default=0.1)
@@ -237,16 +239,12 @@ def main():
 
   # check arguments
   assert os.path.exists(args.weight_file_path), "weight file: " + args.weight_file_path + " not found."
-  assert os.path.exists(args.data_dir), "data directory: " + args.data_dir + " not found."
+  #assert os.path.exists(args.data_dir), "data directory: " + args.data_dir + " not found."
   assert os.path.exists(args.output_dir), "output directory: " + args.output_dir + " not found."
   assert args.line_width >= 0, "line_width should be >= 0."
 
-  for filename in args.data_dir:
-	with tf.Graph().as_default():
-		evaluate(
-		weight_file_path=args.weight_file_path, data_dir=filename, output_dir=args.output_dir,
-		prob_thresh=args.prob_thresh, nms_thresh=args.nms_thresh,
-		lw=args.line_width, display=args.display)
+  with tf.Graph().as_default():
+    evaluate(weight_file_path=args.weight_file_path, data_dir=args.data_dir, output_dir=args.output_dir, prob_thresh=args.prob_thresh, nms_thresh=args.nms_thresh, lw=args.line_width, display=args.display)
 
 if __name__ == '__main__':
   main()

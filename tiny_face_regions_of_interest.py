@@ -17,26 +17,29 @@ def Average(lst): #To calculate Average of the list
   if len(lst) is not 0:
     return int(sum(lst) / len(lst))
   else:
-    print("No Faces for Average!") #Case for length of list found to be zero
+    #print("No Faces for Average!") #Case for length of list found to be zero
     return 1
 
 
 def crop_faces_save(img_xsize, face_list, main_img_name):
   main_directory = '/content/thumbs/'
   img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
+  num_faces_taken = 0
   for i in enumerate(face_list):
     x1x2 = i[1][0][3] - i[1][0][1]
     y1y2 = i[1][0][2] - i[1][0][0]
     if (i[1][0][1] < 0) or (i[1][0][3] < 0) or (i[1][0][0] < 0) or (i[1][0][2] < 0):
       continue
     if (x1x2 < 40) or (y1y2 < 40):
-      print("Not taking small face found at: ", i[1][0][1], i[1][0][3], i[1][0][0], i[1][0][2])
+      #print("Not taking small face found at: ", i[1][0][1], i[1][0][3], i[1][0][0], i[1][0][2])
       continue
     if (x1x2 > 300) or (y1y2 > 300):
-      print("Not taking small face found at: ", i[1][0][1], i[1][0][3], i[1][0][0], i[1][0][2])
+     # print("Not taking small face found at: ", i[1][0][1], i[1][0][3], i[1][0][0], i[1][0][2])
       continue
     oneFace = img_xsize[i[1][0][1]:i[1][0][3], i[1][0][0]:i[1][0][2]]
+    num_faces_taken = num_faces_taken + 1
     resize_save_f(oneFace, oneFace.shape[:2], main_img_name, main_directory, i[0])
+  return num_faces_taken
 
 
 def resize_save_f(face_numpy, resolution, main_img_name, main_directory, n):
@@ -45,18 +48,19 @@ def resize_save_f(face_numpy, resolution, main_img_name, main_directory, n):
   res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
   cv2.imwrite(main_directory + main_img_name + "face" + str(n + 1) + ".jpg", res)
 
-def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name):
+def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_faces_taken):
+  if num_faces_taken == 0:
+    return
   n = 0
   limit = 0
   total_faces = len(face_list)
-  print("Image size: ", img_xsize.shape)
   img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
   main_directory = '/content/nthumbs/'
   size = img_xsize.shape
   legit_size = (size[0] - Wavg, size[1] - Lavg)
-  while True:
-    if n > total_faces:
-      break
+  while n < num_faces_taken:
+    # if n >= num_faces_taken:
+    #   break
     x1 = random.randint(0, legit_size[0] - 1)
     y1 = random.randint(0, legit_size[1] - 1)
     x2 = x1 + Wavg
@@ -71,6 +75,9 @@ def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name):
       n = n + 1
       oneFace = img_xsize[y1:y2, x1:x2]
       if oneFace.shape[0] == 0:
+        n = n - 1
+        continue
+      if oneFace.shape[1] == 0:
         n = n - 1
         continue
       resize_save_nf(oneFace, oneFace.shape[:2], main_img_name, main_directory, n)
