@@ -58,13 +58,15 @@ def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_face
   main_directory = '/content/nthumbs/'
   size = img_xsize.shape
   legit_size = (size[0] - Wavg, size[1] - Lavg)
+  print("Lavg, Wavg: ", Lavg, Wavg)
   while n < num_faces_taken:
     # if n >= num_faces_taken:
     #   break
     x1 = random.randint(0, legit_size[0] - 1)
     y1 = random.randint(0, legit_size[1] - 1)
-    x2 = x1 + Wavg
-    y2 = y1 + Lavg
+    x2 = x1 + Lavg
+    y2 = y1 + Wavg
+
     box = (x1, y1, x2, y2)
     if does_it_overlap(face_list, box):
       if limit > 1000:
@@ -80,7 +82,9 @@ def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_face
       if oneFace.shape[1] == 0:
         n = n - 1
         continue
-      resize_save_nf(oneFace, oneFace.shape[:2], main_img_name, main_directory, n)
+      if ((x2 - x1) < int(0.9 * (y2 - y1))):
+        resize_save_nf(oneFace, oneFace.shape[:2], main_img_name, main_directory, n)
+      
 
 def resize_save_nf(face_numpy, resolution, main_img_name, main_directory, n):
   n_resolution = new_resolution(resolution)
