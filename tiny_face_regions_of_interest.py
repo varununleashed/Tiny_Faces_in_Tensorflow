@@ -28,6 +28,7 @@ def crop_faces_save(img_xsize, face_list, main_img_name):
   for i in enumerate(face_list):
     x1x2 = i[1][0][3] - i[1][0][1]
     y1y2 = i[1][0][2] - i[1][0][0]
+    #print("x1x2 y1y2 is: ", x1x2, y1y2)
     if (i[1][0][1] < 0) or (i[1][0][3] < 0) or (i[1][0][0] < 0) or (i[1][0][2] < 0):
       continue
     if (x1x2 < 40) or (y1y2 < 40):
@@ -38,15 +39,19 @@ def crop_faces_save(img_xsize, face_list, main_img_name):
       continue
     oneFace = img_xsize[i[1][0][1]:i[1][0][3], i[1][0][0]:i[1][0][2]]
     num_faces_taken = num_faces_taken + 1
-    resize_save_f(oneFace, oneFace.shape[:2], main_img_name, main_directory, i[0])
+    resize_save_f(oneFace, main_img_name, main_directory, i[0])
+  #print("Number faces returned: ", num_faces_taken)
   return num_faces_taken
 
-
-def resize_save_f(face_numpy, resolution, main_img_name, main_directory, n):
-  n_resolution = new_resolution(resolution)
+def resize_save_f(face_numpy, main_img_name, main_directory, n):
+  #print("resize_save_f gives face_shape: ", face_numpy.shape[:2])
+  n_resolution = new_resolution(face_numpy.shape[:2])
   res = cv2.resize(face_numpy, dsize=n_resolution, interpolation=cv2.INTER_CUBIC)
-  res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
-  cv2.imwrite(main_directory + main_img_name + "face" + str(n + 1) + ".jpg", res)
+  height = np.size(res, 0)
+  width = np.size(res, 1)
+  if not (width < 40 or height < 40 or width > 300 or height > 300):
+    res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
+    cv2.imwrite(main_directory + main_img_name + "face" + str(n + 1) + ".jpg", res)
 
 def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_faces_taken):
   if num_faces_taken == 0:
@@ -57,17 +62,21 @@ def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_face
   img_xsize = cv2.cvtColor(img_xsize, cv2.COLOR_BGR2RGB)
   main_directory = '/content/nthumbs/'
   size = img_xsize.shape
+  #print("Original Size of image: ", size)
   legit_size = (size[0] - Wavg, size[1] - Lavg)
-  print("Lavg, Wavg: ", Lavg, Wavg)
+  #print("Legit size of image: ", legit_size[0], legit_size[1])
+  #print("Lavg, Wavg: ", Lavg, Wavg)
   while n < num_faces_taken:
     # if n >= num_faces_taken:
     #   break
-    x1 = random.randint(0, legit_size[0] - 1)
-    y1 = random.randint(0, legit_size[1] - 1)
+    x1 = random.randint(0, legit_size[1])
+    y1 = random.randint(0, legit_size[0])
     x2 = x1 + Lavg
     y2 = y1 + Wavg
 
     box = (x1, y1, x2, y2)
+    #print("Box calculated: ", box)
+    #print("Face list gives: ", face_list)
     if does_it_overlap(face_list, box):
       if limit > 1000:
         break
@@ -75,26 +84,37 @@ def crop_nonfaces_save(img_xsize, face_list, Lavg, Wavg, main_img_name, num_face
       continue
     else:
       n = n + 1
+      print()
       oneFace = img_xsize[y1:y2, x1:x2]
       if oneFace.shape[0] == 0:
+        #print("oneFace.shape[0] was 0")
         n = n - 1
         continue
       if oneFace.shape[1] == 0:
+        #print("oneFace.shape[1] was 0")
         n = n - 1
         continue
-      if ((x2 - x1) < int(0.9 * (y2 - y1))):
-        resize_save_nf(oneFace, oneFace.shape[:2], main_img_name, main_directory, n)
+      height = np.size(oneFace, 0)
+      width = np.size(oneFace, 1)
+      #print("height, width of non-face box: ", height, width)
+      if width < (int(0.95*height)) and height < (int(3*width)):
+        resize_save_nf(oneFace, main_img_name, main_directory, n)
+      else:
+        continue
       
-
-def resize_save_nf(face_numpy, resolution, main_img_name, main_directory, n):
-  n_resolution = new_resolution(resolution)
+def resize_save_nf(face_numpy, main_img_name, main_directory, n):
+  n_resolution = new_resolution(face_numpy.shape[:2])
   res = cv2.resize(face_numpy, dsize=n_resolution, interpolation=cv2.INTER_CUBIC)
-  res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
-  cv2.imwrite(main_directory + main_img_name + "Nface" + str(n + 1) + ".jpg", res)
+  height = np.size(res, 0)
+  width = np.size(res, 1)
+  if not (width < 40 or height < 40 or width > 300 or height > 300):
+    res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
+    cv2.imwrite(main_directory + main_img_name + "Nface" + str(n + 1) + ".jpg", res)
+  
 
 def new_resolution(dim_tuple):
   dividing_factor = 1.0
-  if dim_tuple[1] <= 300 and dim_tuple[1] >= 40:
+  if dim_tuple[1] <= 300 and dim_tuple[0] >= 40:
     dividing_factor = (1/130) * dim_tuple[1] + (9/13)
   image_ratio = dim_tuple[1] / dim_tuple[0]
   new_height = dim_tuple[1] / dividing_factor
