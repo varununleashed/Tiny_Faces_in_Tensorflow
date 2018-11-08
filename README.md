@@ -1,6 +1,6 @@
 # Tiny Face Detector in TensorFlow
 
- A Regions of Interest (ROI) extractor for implementation of https://ivul.kaust.edu.sa/Pages/pub-tiny-faces.aspx created at External Internship Program EIP MLBLR, using [cydonia999's](https://github.com/cydonia999/Tiny_Faces_in_Tensorflow) implementation of Tiny Face Detector from [authors' MatConvNet codes](https://github.com/peiyunh/tiny)[1].
+ A Regions of Interest (ROI) extractor for implementation of [Finding Tiny Faces in the Wild with Generative Adversarial Network](https://ivul.kaust.edu.sa/Pages/pub-tiny-faces.aspx) created at External Internship Program EIP MLBLR, using [cydonia999's](https://github.com/cydonia999/Tiny_Faces_in_Tensorflow) implementation of Tiny Face Detector from [authors' MatConvNet codes](https://github.com/peiyunh/tiny)[1].
  
  Extracts equal number of non-faces as faces (ROI) detected within an image.
 
